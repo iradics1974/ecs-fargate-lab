@@ -1,0 +1,23 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  AWS_REGION: eu-central-1
+  IMAGE_NAME: ecs-fargate-lab-app
+
+steps:
+  - checkout: self
+
+  - task: Docker@2
+    displayName: Build Docker image
+    inputs:
+      command: build
+      Dockerfile: app/Dockerfile
+      buildContext: .
+      tags: |
+        $(Build.BuildId)
