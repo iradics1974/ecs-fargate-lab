@@ -8,16 +8,32 @@ pool:
 
 variables:
   AWS_REGION: eu-central-1
-  IMAGE_NAME: ecs-fargate-lab-app
+  ECR_REPO: ecs-fargate-lab-app
+  IMAGE_TAG: $(Build.BuildId)
 
 steps:
   - checkout: self
 
-  - task: Docker@2
-    displayName: Build Docker image
-    inputs:
-      command: build
-      Dockerfile: app/Dockerfile
-      buildContext: .
-      tags: |
-        $(Build.BuildId)
+  - script: |
+      echo "Logging in to Amazon ECR..."
+      aws ecr get-login-password --region $AWS_REGION \
+        | docker login --username AWS --password-stdin \
+          ${AWS_ACCOUNT_ID}.dkr.ecr.$AWS_REGION.amazonaws.com
+    displayName: "Login to ECR"
+
+  - script: |
+      echo "Build Docker image"
+      docker build -t $ECR_REPO:$IMAGE_TAG ./app
+    displayName: "Build Docker image"
+
+  - script: |
+      echo "Tag Docker image"
+      docker tag $ECR_REPO:$IMAGE_TAG \
+        ${AWS_ACCOUNT_ID}.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:$IMAGE_TAG
+    displayName: "Tag Docker image"
+
+  - script: |
+      echo "Push Docker image to ECR"
+      docker push \
+        ${AWS_ACCOUNT_ID}.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:$IMAGE_TAG
+    displayName: "Push Docker image"
