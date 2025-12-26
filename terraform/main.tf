@@ -19,14 +19,23 @@ data "aws_subnets" "default" {
 
 resource "aws_security_group" "app_sg" {
   name        = "${var.app_name}-sg"
-  description = "Allow HTTP traffic to the app"
+  description = "Allow HTTP traffic to ALB and app"
   vpc_id      = data.aws_vpc.default.id
 
+  # Internet -> ALB (HTTP 80)
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # ALB -> ECS Task (App port 8080)
   ingress {
     from_port   = var.container_port
     to_port     = var.container_port
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = ["0.0.0.0/0"] # lab környezetben oké
   }
 
   egress {
@@ -54,13 +63,15 @@ resource "aws_iam_role" "ecs_task_execution_role" {
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Principal = {
-        Service = "ecs-tasks.amazonaws.com"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "ecs-tasks.amazonaws.com"
+        }
+        Action = "sts:AssumeRole"
       }
-      Action = "sts:AssumeRole"
-    }]
+    ]
   })
 }
 
@@ -91,6 +102,7 @@ resource "aws_ecs_task_definition" "this" {
         {
           containerPort = var.container_port
           hostPort      = var.container_port
+          protocol      = "tcp"
         }
       ]
     }
@@ -148,8 +160,8 @@ resource "aws_ecs_service" "this" {
   desired_count   = 1
 
   network_configuration {
-    subnets         = data.aws_subnets.default.ids
-    security_groups = [aws_security_group.app_sg.id]
+    subnets          = data.aws_subnets.default.ids
+    security_groups  = [aws_security_group.app_sg.id]
     assign_public_ip = true
   }
 
