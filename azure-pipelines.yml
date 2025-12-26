@@ -1,39 +1,54 @@
+# Pipeline akkor indul, ha a main branch-re commit érkezik
 trigger:
   branches:
     include:
       - main
 
+# Microsoft-hosted Linux agent
 pool:
   vmImage: ubuntu-latest
 
+# Pipeline-szintű változók (nem secret-ek)
 variables:
   AWS_REGION: eu-central-1
   ECR_REPO: ecs-fargate-lab-app
   IMAGE_TAG: $(Build.BuildId)
 
 steps:
+  # 1️⃣ Repo checkout
   - checkout: self
 
+  # 2️⃣ AWS ECR login
+  # AWS CLI token-t kér ECR-hez, majd docker login-t csinál
   - script: |
       echo "Logging in to Amazon ECR..."
       aws ecr get-login-password --region $AWS_REGION \
         | docker login --username AWS --password-stdin \
           ${AWS_ACCOUNT_ID}.dkr.ecr.$AWS_REGION.amazonaws.com
     displayName: "Login to ECR"
+    env:
+      # AWS credentialek Azure DevOps secret variable-ből
+      AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+      AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+      AWS_DEFAULT_REGION: $(AWS_DEFAULT_REGION)
 
+  # 3️⃣ Docker image build
+  # A ./app mappában lévő Dockerfile alapján
   - script: |
-      echo "Build Docker image"
+      echo "Building Docker image..."
       docker build -t $ECR_REPO:$IMAGE_TAG ./app
     displayName: "Build Docker image"
 
+  # 4️⃣ Docker image tag-elése ECR URI-ra
   - script: |
-      echo "Tag Docker image"
+      echo "Tagging Docker image..."
       docker tag $ECR_REPO:$IMAGE_TAG \
         ${AWS_ACCOUNT_ID}.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:$IMAGE_TAG
     displayName: "Tag Docker image"
 
+  # 5️⃣ Docker image push ECR-be
   - script: |
-      echo "Push Docker image to ECR"
+      echo "Pushing Docker image to ECR..."
       docker push \
         ${AWS_ACCOUNT_ID}.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:$IMAGE_TAG
     displayName: "Push Docker image"
