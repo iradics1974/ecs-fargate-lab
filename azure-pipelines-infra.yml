@@ -19,11 +19,13 @@ stages:
   jobs:
   - job: terraform_plan
     displayName: "Terraform Plan"
-    env:
+
+    variables:
       AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
       AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
       AWS_DEFAULT_REGION: eu-central-1
       AWS_EC2_METADATA_DISABLED: "true"
+
     steps:
     - checkout: self
 
@@ -60,11 +62,13 @@ stages:
   - deployment: terraform_apply
     displayName: "Terraform Apply"
     environment: infra-approval
-    env:
+
+    variables:
       AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
       AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
       AWS_DEFAULT_REGION: eu-central-1
       AWS_EC2_METADATA_DISABLED: "true"
+
     strategy:
       runOnce:
         deploy:
