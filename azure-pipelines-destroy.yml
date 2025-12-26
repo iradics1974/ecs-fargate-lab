@@ -1,0 +1,39 @@
+trigger: none
+pr: none
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  TF_VERSION: '1.6.6'
+  AWS_DEFAULT_REGION: 'eu-central-1'
+
+stages:
+- stage: Destroy
+  displayName: Terraform Destroy
+  environment: infra-approval   # 🔐 ugyanaz az approval, mint apply-nál
+  jobs:
+  - job: DestroyInfra
+    displayName: Destroy ECS Fargate Infrastructure
+    steps:
+
+    - checkout: self
+
+    # Terraform install (pipeline-ban mindig kell)
+    - task: TerraformInstaller@1
+      displayName: Install Terraform
+      inputs:
+        terraformVersion: $(TF_VERSION)
+
+    # Terraform init
+    - script: |
+        cd terraform
+        terraform init
+      displayName: Terraform Init
+
+    # Terraform destroy (nem interaktív, ezért approval védi!)
+    - script: |
+        cd terraform
+        terraform destroy -auto-approve \
+          -var="ecr_image_uri=dummy"
+      displayName: Terraform Destroy
