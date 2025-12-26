@@ -1,97 +1,89 @@
 trigger:
-  paths:
+  branches:
     include:
-      - terraform/**
+      - main
 
-pr: none
+pool:
+  vmImage: ubuntu-latest
 
 variables:
-  TF_WORKING_DIR: terraform
+  TF_VERSION: "1.6.6"
+  TF_WORKING_DIR: "terraform"
 
 stages:
-
 # =========================
-# STAGE 1: Terraform PLAN
+# Terraform PLAN
 # =========================
-- stage: TerraformPlan
+- stage: Terraform_Plan
   displayName: "Terraform – Plan"
   jobs:
-  - job: Plan
+  - job: terraform_plan
     displayName: "Terraform Plan"
-    pool:
-      vmImage: ubuntu-latest
-
     steps:
     - checkout: self
 
-    - task: Bash@3
+    - task: TerraformInstaller@1
       displayName: "Install Terraform"
       inputs:
-        targetType: inline
-        script: |
-          sudo apt-get update
-          sudo apt-get install -y gnupg software-properties-common curl
-          curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
-          echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
-          sudo apt-get update
-          sudo apt-get install -y terraform
-          terraform -version
+        terraformVersion: $(TF_VERSION)
 
-    - task: Bash@3
+    - bash: |
+        terraform init
       displayName: "Terraform Init"
-      inputs:
-        targetType: inline
-        workingDirectory: $(TF_WORKING_DIR)
-        script: |
-          terraform init
+      workingDirectory: $(TF_WORKING_DIR)
 
-    - task: Bash@3
-      displayName: "Terraform Plan"
+    # -------------------------
+    # DEBUG – variable check
+    # -------------------------
+    - bash: |
+        echo "ECR_IMAGE_URI from pipeline: $ECR_IMAGE_URI"
+        echo "TF_VAR_ecr_image_uri: $TF_VAR_ecr_image_uri"
+      displayName: "DEBUG variables"
+      workingDirectory: $(TF_WORKING_DIR)
       env:
-        AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
-        AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
-        AWS_DEFAULT_REGION: $(AWS_DEFAULT_REGION)
-      inputs:
-        targetType: inline
-        workingDirectory: $(TF_WORKING_DIR)
-        script: |
-          terraform plan
+        ECR_IMAGE_URI: $(ECR_IMAGE_URI)
+        TF_VAR_ecr_image_uri: $(ECR_IMAGE_URI)
 
+    # -------------------------
+    # Terraform Plan (NON-interactive)
+    # -------------------------
+    - bash: |
+        terraform plan -input=false
+      displayName: "Terraform Plan"
+      workingDirectory: $(TF_WORKING_DIR)
+      env:
+        TF_VAR_ecr_image_uri: $(ECR_IMAGE_URI)
 
 # =========================
-# STAGE 2: Terraform APPLY
+# Terraform APPLY (Manual Approval)
 # =========================
-- stage: TerraformApply
+- stage: Terraform_Apply
   displayName: "Terraform – Apply (Manual Approval)"
-  dependsOn: TerraformPlan
+  dependsOn: Terraform_Plan
   condition: succeeded()
-
   jobs:
-  - deployment: Apply
+  - deployment: terraform_apply
     displayName: "Terraform Apply"
-    environment: infra-approval   # EZ ADJA A MANUAL APPROVAL-T
+    environment: infra-approval
     strategy:
       runOnce:
         deploy:
           steps:
           - checkout: self
 
-          - task: Bash@3
-            displayName: "Terraform Init"
+          - task: TerraformInstaller@1
+            displayName: "Install Terraform"
             inputs:
-              targetType: inline
-              workingDirectory: $(TF_WORKING_DIR)
-              script: |
-                terraform init
+              terraformVersion: $(TF_VERSION)
 
-          - task: Bash@3
+          - bash: |
+              terraform init
+            displayName: "Terraform Init"
+            workingDirectory: $(TF_WORKING_DIR)
+
+          - bash: |
+              terraform apply -input=false -auto-approve
             displayName: "Terraform Apply"
+            workingDirectory: $(TF_WORKING_DIR)
             env:
-              AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
-              AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
-              AWS_DEFAULT_REGION: $(AWS_DEFAULT_REGION)
-            inputs:
-              targetType: inline
-              workingDirectory: $(TF_WORKING_DIR)
-              script: |
-                terraform apply -auto-approve
+              TF_VAR_ecr_image_uri: $(ECR_IMAGE_URI)
