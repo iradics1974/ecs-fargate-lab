@@ -1,5 +1,5 @@
 # Terraform DESTROY pipeline
-# Kontrollált erőforrás törlés approval-val
+# Kontrollált infra törlés manuális approval-val
 
 trigger: none
 
@@ -7,14 +7,16 @@ pool:
   vmImage: ubuntu-latest
 
 variables:
-  AWS_REGION: eu-central-1
-  TF_WORKING_DIR: terraform
-  - group: aws-lab-credentials
+- name: AWS_REGION
+  value: eu-central-1
+- name: TF_WORKING_DIR
+  value: terraform
+- group: aws-lab-credentials
 
 jobs:
 - deployment: terraform_destroy
   displayName: "Terraform destroy (manual approval)"
-  environment: infra-approval   # <-- ITT SZABAD használni
+  environment: infra-approval
   strategy:
     runOnce:
       deploy:
