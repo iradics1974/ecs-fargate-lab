@@ -1,98 +1,97 @@
-trigger:
-  branches:
-    include:
-      - main
+trigger: none
+
+variables:
+  - group: aws-lab-credentials
 
 pool:
   vmImage: ubuntu-latest
 
-variables:
-  TF_VERSION: "1.6.6"
-  TF_WORKING_DIR: "terraform"
-
 stages:
-# =========================
-# Terraform PLAN
-# =========================
-- stage: Terraform_Plan
-  displayName: "Terraform – Plan"
+# =================================================
+# STAGE 1: Terraform PLAN
+# =================================================
+- stage: Plan
+  displayName: "Terraform Plan"
   jobs:
-  - job: terraform_plan
+  - job: TerraformPlan
     displayName: "Terraform Plan"
-
-    variables:
-      AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
-      AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
-      AWS_DEFAULT_REGION: eu-central-1
-      AWS_EC2_METADATA_DISABLED: "true"
-
     steps:
-    - checkout: self
+    - bash: |
+        set -e
+        aws sts get-caller-identity
+      displayName: "AWS auth check"
+      env:
+        AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+        AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+        AWS_DEFAULT_REGION: eu-central-1
 
     - task: TerraformInstaller@1
       displayName: "Install Terraform"
       inputs:
-        terraformVersion: $(TF_VERSION)
+        terraformVersion: "latest"
 
     - bash: |
-        rm -rf .terraform
-      displayName: "Clean .terraform directory"
-      workingDirectory: $(TF_WORKING_DIR)
-
-    - bash: |
-        terraform init -upgrade
-      displayName: "Terraform Init"
-      workingDirectory: $(TF_WORKING_DIR)
-
-    - bash: |
-        terraform plan -input=false
-      displayName: "Terraform Plan"
-      workingDirectory: $(TF_WORKING_DIR)
+        set -e
+        terraform init -input=false
+      displayName: "Terraform init"
+      workingDirectory: terraform
       env:
-        TF_VAR_ecr_image_uri: $(ECR_IMAGE_URI)
+        AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+        AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+        AWS_DEFAULT_REGION: eu-central-1
 
-# =========================
-# Terraform APPLY (Manual Approval)
-# =========================
-- stage: Terraform_Apply
-  displayName: "Terraform – Apply (Manual Approval)"
-  dependsOn: Terraform_Plan
+    - bash: |
+        set -e
+        terraform plan -input=false \
+          -var="ecr_image_uri=$(ECR_IMAGE_URI)"
+      displayName: "Terraform plan"
+      workingDirectory: terraform
+      env:
+        AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+        AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+        AWS_DEFAULT_REGION: eu-central-1
+
+# =================================================
+# STAGE 2: Manual Approval
+# =================================================
+- stage: Approve
+  displayName: "Manual Approval"
+  dependsOn: Plan
   condition: succeeded()
   jobs:
-  - deployment: terraform_apply
+  - job: ManualApproval
+    displayName: "Wait for approval"
+    pool: server
+    steps:
+    - task: ManualValidation@0
+      inputs:
+        instructions: "Approve to APPLY Terraform changes"
+        onTimeout: reject
+      timeoutInMinutes: 60
+
+# =================================================
+# STAGE 3: Terraform APPLY
+# =================================================
+- stage: Apply
+  displayName: "Terraform Apply"
+  dependsOn: Approve
+  condition: succeeded()
+  jobs:
+  - job: TerraformApply
     displayName: "Terraform Apply"
-    environment: infra-approval
+    steps:
+    - task: TerraformInstaller@1
+      displayName: "Install Terraform"
+      inputs:
+        terraformVersion: "latest"
 
-    variables:
-      AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
-      AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
-      AWS_DEFAULT_REGION: eu-central-1
-      AWS_EC2_METADATA_DISABLED: "true"
-
-    strategy:
-      runOnce:
-        deploy:
-          steps:
-          - checkout: self
-
-          - task: TerraformInstaller@1
-            displayName: "Install Terraform"
-            inputs:
-              terraformVersion: $(TF_VERSION)
-
-          - bash: |
-              rm -rf .terraform
-            displayName: "Clean .terraform directory"
-            workingDirectory: $(TF_WORKING_DIR)
-
-          - bash: |
-              terraform init -upgrade
-            displayName: "Terraform Init"
-            workingDirectory: $(TF_WORKING_DIR)
-
-          - bash: |
-              terraform apply -input=false -auto-approve
-            displayName: "Terraform Apply"
-            workingDirectory: $(TF_WORKING_DIR)
-            env:
-              TF_VAR_ecr_image_uri: $(ECR_IMAGE_URI)
+    - bash: |
+        set -e
+        terraform apply -auto-approve \
+          -var="ecr_image_uri=$(ECR_IMAGE_URI)"
+      displayName: "Terraform apply"
+      workingDirectory: terraform
+      env:
+        AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+        AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+        AWS_DEFAULT_REGION: eu-central-1
