@@ -1,0 +1,37 @@
+trigger: none
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+# -------------------------------------------------
+# Step 1: AWS CLI jelenlétének ellenőrzése
+# -------------------------------------------------
+- bash: |
+    set -e
+    aws --version
+  displayName: "Check AWS CLI version"
+
+# -------------------------------------------------
+# Step 2: AWS hitelesítés ellenőrzése
+# -------------------------------------------------
+- bash: |
+    set -e
+    aws sts get-caller-identity
+  displayName: "AWS auth check"
+  env:
+    AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+    AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+    AWS_DEFAULT_REGION: eu-central-1
+
+# -------------------------------------------------
+# Step 3: Egyszerű AWS read-only API hívás
+# -------------------------------------------------
+- bash: |
+    set -e
+    aws ecs list-clusters
+  displayName: "AWS ECS read check"
+  env:
+    AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+    AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+    AWS_DEFAULT_REGION: eu-central-1
