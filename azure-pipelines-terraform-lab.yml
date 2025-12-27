@@ -1,0 +1,61 @@
+trigger: none
+
+variables:
+- group: aws-lab-credentials
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+# -------------------------------------------------
+# Step 1: AWS auth check (fail fast)
+# -------------------------------------------------
+- bash: |
+    set -e
+    aws sts get-caller-identity
+  displayName: "AWS auth check"
+  env:
+    AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+    AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+    AWS_DEFAULT_REGION: eu-central-1
+
+# -------------------------------------------------
+# Step 2: Install Terraform
+# -------------------------------------------------
+- task: TerraformInstaller@1
+  displayName: "Install Terraform"
+  inputs:
+    terraformVersion: "latest"
+
+# -------------------------------------------------
+# Step 3: Terraform version check
+# -------------------------------------------------
+- bash: |
+    terraform --version
+  displayName: "Terraform version check"
+
+# -------------------------------------------------
+# Step 4: Terraform init
+# -------------------------------------------------
+- bash: |
+    set -e
+    terraform init -input=false
+  displayName: "Terraform init"
+  workingDirectory: terraform
+  env:
+    AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+    AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+    AWS_DEFAULT_REGION: eu-central-1
+
+# -------------------------------------------------
+# Step 5: Terraform plan
+# -------------------------------------------------
+- bash: |
+    set -e
+    terraform plan -input=false
+  displayName: "Terraform plan"
+  workingDirectory: terraform
+  env:
+    AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+    AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+    AWS_DEFAULT_REGION: eu-central-1
