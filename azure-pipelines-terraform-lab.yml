@@ -53,6 +53,7 @@ steps:
 - bash: |
     set -e
     terraform plan -input=false
+     -var="ecr_image_uri=$(ECR_IMAGE_URI)"
   displayName: "Terraform plan"
   workingDirectory: terraform
   env:
