@@ -1,7 +1,7 @@
 trigger: none
 
 variables:
-- group: aws-lab-credentials
+  - group: aws-lab-credentials
 
 pool:
   vmImage: ubuntu-latest
@@ -48,12 +48,19 @@ steps:
     AWS_DEFAULT_REGION: eu-central-1
 
 # -------------------------------------------------
+# DEBUG: show ECR_IMAGE_URI (NOT secret)
+# -------------------------------------------------
+- bash: |
+    echo "DEBUG ECR_IMAGE_URI=$(ECR_IMAGE_URI)"
+  displayName: "DEBUG: show ECR_IMAGE_URI"
+
+# -------------------------------------------------
 # Step 5: Terraform plan
 # -------------------------------------------------
 - bash: |
     set -e
-    terraform plan -input=false
-     -var="ecr_image_uri=$(ECR_IMAGE_URI)"
+    terraform plan -input=false \
+      -var="ecr_image_uri=$(ECR_IMAGE_URI)"
   displayName: "Terraform plan"
   workingDirectory: terraform
   env:
