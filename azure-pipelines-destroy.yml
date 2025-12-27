@@ -23,6 +23,13 @@ jobs:
         steps:
         - checkout: self
 
+        # 1️⃣ Terraform telepítése
+        - task: TerraformInstaller@1
+          displayName: "Install Terraform"
+          inputs:
+            terraformVersion: "1.6.6"
+
+        # 2️⃣ Terraform init
         - bash: |
             terraform init -upgrade
           displayName: "Terraform init"
@@ -32,6 +39,7 @@ jobs:
             AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
             AWS_DEFAULT_REGION: $(AWS_REGION)
 
+        # 3️⃣ Terraform destroy
         - bash: |
             terraform destroy -auto-approve
           displayName: "Terraform destroy"
