@@ -1,39 +1,41 @@
+# Terraform DESTROY pipeline
+# Kontrollált erőforrás törlés approval-val
+
 trigger: none
-pr: none
 
 pool:
   vmImage: ubuntu-latest
 
 variables:
-  TF_VERSION: '1.6.6'
-  AWS_DEFAULT_REGION: 'eu-central-1'
+  AWS_REGION: eu-central-1
+  TF_WORKING_DIR: terraform
+  - group: aws-lab-credentials
 
-stages:
-- stage: Destroy
-  displayName: Terraform Destroy
-  environment: infra-approval   # 🔐 ugyanaz az approval, mint apply-nál
-  jobs:
-  - job: DestroyInfra
-    displayName: Destroy ECS Fargate Infrastructure
-    steps:
+jobs:
+- deployment: terraform_destroy
+  displayName: "Terraform destroy (manual approval)"
+  environment: infra-approval   # <-- ITT SZABAD használni
+  strategy:
+    runOnce:
+      deploy:
+        steps:
+        - checkout: self
 
-    - checkout: self
+        - bash: |
+            terraform init -upgrade
+          displayName: "Terraform init"
+          workingDirectory: $(TF_WORKING_DIR)
+          env:
+            AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+            AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+            AWS_DEFAULT_REGION: $(AWS_REGION)
 
-    # Terraform install (pipeline-ban mindig kell)
-    - task: TerraformInstaller@1
-      displayName: Install Terraform
-      inputs:
-        terraformVersion: $(TF_VERSION)
-
-    # Terraform init
-    - script: |
-        cd terraform
-        terraform init
-      displayName: Terraform Init
-
-    # Terraform destroy (nem interaktív, ezért approval védi!)
-    - script: |
-        cd terraform
-        terraform destroy -auto-approve \
-          -var="ecr_image_uri=dummy"
-      displayName: Terraform Destroy
+        - bash: |
+            terraform destroy -auto-approve
+          displayName: "Terraform destroy"
+          workingDirectory: $(TF_WORKING_DIR)
+          env:
+            AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+            AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+            AWS_DEFAULT_REGION: $(AWS_REGION)
+            TF_VAR_ecr_image_uri: $(ECR_IMAGE_URI)
