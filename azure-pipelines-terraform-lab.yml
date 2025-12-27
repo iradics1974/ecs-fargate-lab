@@ -1,69 +1,56 @@
-trigger: none
+# Terraform infra pipeline
+# Cél:
+# - külön fusson az app pipeline-tól
+# - ne legyen interaktív
+# - pipeline variable-ból kapja az image URI-t
 
-variables:
-  - group: aws-lab-credentials
+trigger: none   # <-- nagyon fontos: nem indul el automatikusan
 
 pool:
   vmImage: ubuntu-latest
 
+variables:
+  # AWS régió
+  AWS_REGION: eu-central-1
+
+  # Terraform working directory
+  TF_WORKING_DIR: terraform
+
+  # AWS credentialek variable groupból
+  - group: aws-lab-credentials
+
 steps:
-# -------------------------------------------------
-# Step 1: AWS auth check (fail fast)
-# -------------------------------------------------
-- bash: |
-    set -e
-    aws sts get-caller-identity
-  displayName: "AWS auth check"
-  env:
-    AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
-    AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
-    AWS_DEFAULT_REGION: eu-central-1
+  # 1️⃣ Repo checkout
+  - checkout: self
 
-# -------------------------------------------------
-# Step 2: Install Terraform
-# -------------------------------------------------
-- task: TerraformInstaller@1
-  displayName: "Install Terraform"
-  inputs:
-    terraformVersion: "latest"
+  # 2️⃣ Terraform init
+  - bash: |
+      terraform init -upgrade
+    displayName: "Terraform init"
+    workingDirectory: $(TF_WORKING_DIR)
+    env:
+      AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+      AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+      AWS_DEFAULT_REGION: $(AWS_REGION)
 
-# -------------------------------------------------
-# Step 3: Terraform version check
-# -------------------------------------------------
-- bash: |
-    terraform --version
-  displayName: "Terraform version check"
+  # 3️⃣ Terraform plan (nem interaktív)
+  - bash: |
+      terraform plan -input=false
+    displayName: "Terraform plan"
+    workingDirectory: $(TF_WORKING_DIR)
+    env:
+      AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+      AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+      AWS_DEFAULT_REGION: $(AWS_REGION)
+      TF_VAR_ecr_image_uri: $(ECR_IMAGE_URI)
 
-# -------------------------------------------------
-# Step 4: Terraform init
-# -------------------------------------------------
-- bash: |
-    set -e
-    terraform init -input=false
-  displayName: "Terraform init"
-  workingDirectory: terraform
-  env:
-    AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
-    AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
-    AWS_DEFAULT_REGION: eu-central-1
-
-# -------------------------------------------------
-# DEBUG: show ECR_IMAGE_URI (NOT secret)
-# -------------------------------------------------
-- bash: |
-    echo "DEBUG ECR_IMAGE_URI=$(ECR_IMAGE_URI)"
-  displayName: "DEBUG: show ECR_IMAGE_URI"
-
-# -------------------------------------------------
-# Step 5: Terraform plan
-# -------------------------------------------------
-- bash: |
-    set -e
-    terraform plan -input=false \
-      -var="ecr_image_uri=$(ECR_IMAGE_URI)"
-  displayName: "Terraform plan"
-  workingDirectory: terraform
-  env:
-    AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
-    AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
-    AWS_DEFAULT_REGION: eu-central-1
+  # 4️⃣ Terraform apply (nem interaktív, automatikus)
+  - bash: |
+      terraform apply -auto-approve -input=false
+    displayName: "Terraform apply"
+    workingDirectory: $(TF_WORKING_DIR)
+    env:
+      AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+      AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+      AWS_DEFAULT_REGION: $(AWS_REGION)
+      TF_VAR_ecr_image_uri: $(ECR_IMAGE_URI)
