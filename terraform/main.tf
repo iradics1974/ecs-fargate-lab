@@ -1,6 +1,6 @@
-########################
-# Networking (VPC)
-########################
+########################################
+# Data sources
+########################################
 
 data "aws_vpc" "default" {
   default = true
@@ -13,16 +13,15 @@ data "aws_subnets" "default" {
   }
 }
 
-########################
+########################################
 # Security Group
-########################
+########################################
 
 resource "aws_security_group" "app_sg" {
-  name        = "${var.app_name}-sg"
-  description = "Allow HTTP traffic to ALB and app"
+  name        = "ecs-fargate-lab-sg"
+  description = "Allow HTTP traffic to ECS Fargate app"
   vpc_id      = data.aws_vpc.default.id
 
-  # Internet -> ALB (HTTP 80)
   ingress {
     from_port   = 80
     to_port     = 80
@@ -30,12 +29,11 @@ resource "aws_security_group" "app_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  # ALB -> ECS Task (App port 8080)
   ingress {
-    from_port   = var.container_port
-    to_port     = var.container_port
+    from_port   = 8080
+    to_port     = 8080
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"] # lab környezetben oké
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   egress {
@@ -46,32 +44,30 @@ resource "aws_security_group" "app_sg" {
   }
 }
 
-########################
+########################################
 # ECS Cluster
-########################
+########################################
 
 resource "aws_ecs_cluster" "this" {
-  name = var.app_name
+  name = "ecs-fargate-lab"
 }
 
-########################
-# IAM Role for ECS Task
-########################
+########################################
+# IAM Role for ECS Task Execution
+########################################
 
 resource "aws_iam_role" "ecs_task_execution_role" {
-  name = "${var.app_name}-execution-role"
+  name = "ecs-fargate-lab-execution-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Principal = {
-          Service = "ecs-tasks.amazonaws.com"
-        }
-        Action = "sts:AssumeRole"
+    Statement = [{
+      Effect = "Allow"
+      Principal = {
+        Service = "ecs-tasks.amazonaws.com"
       }
-    ]
+      Action = "sts:AssumeRole"
+    }]
   })
 }
 
@@ -80,12 +76,12 @@ resource "aws_iam_role_policy_attachment" "ecs_task_execution_role_policy" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
-########################
+########################################
 # ECS Task Definition
-########################
+########################################
 
 resource "aws_ecs_task_definition" "this" {
-  family                   = var.app_name
+  family                   = "ecs-fargate-lab"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                      = "256"
@@ -94,14 +90,13 @@ resource "aws_ecs_task_definition" "this" {
 
   container_definitions = jsonencode([
     {
-      name      = var.app_name
+      name      = "ecs-fargate-lab"
       image     = var.ecr_image_uri
       essential = true
 
       portMappings = [
         {
-          containerPort = var.container_port
-          hostPort      = var.container_port
+          containerPort = 8080
           protocol      = "tcp"
         }
       ]
@@ -109,31 +104,32 @@ resource "aws_ecs_task_definition" "this" {
   ])
 }
 
-########################
-# Application Load Balancer
-########################
+########################################
+# Load Balancer + Target Group
+########################################
 
 resource "aws_lb" "this" {
-  name               = "${var.app_name}-alb"
+  name               = "ecs-fargate-lab-alb"
   load_balancer_type = "application"
   subnets            = data.aws_subnets.default.ids
   security_groups    = [aws_security_group.app_sg.id]
 }
 
 resource "aws_lb_target_group" "this" {
-  name        = "${var.app_name}-tg"
-  port        = var.container_port
+  name        = "ecs-fargate-lab-tg"
+  port        = 8080
   protocol    = "HTTP"
   vpc_id      = data.aws_vpc.default.id
   target_type = "ip"
 
   health_check {
     path                = "/"
+    protocol            = "HTTP"
+    matcher             = "200"
     interval            = 30
     timeout             = 5
     healthy_threshold   = 2
     unhealthy_threshold = 2
-    matcher             = "200"
   }
 }
 
@@ -148,16 +144,16 @@ resource "aws_lb_listener" "this" {
   }
 }
 
-########################
-# ECS Service
-########################
+########################################
+# ECS Service  (KRITIKUS BLOKK)
+########################################
 
 resource "aws_ecs_service" "this" {
-  name            = var.app_name
+  name            = "ecs-fargate-lab"
   cluster         = aws_ecs_cluster.this.id
   task_definition = aws_ecs_task_definition.this.arn
-  launch_type     = "FARGATE"
   desired_count   = 1
+  launch_type     = "FARGATE"
 
   network_configuration {
     subnets          = data.aws_subnets.default.ids
@@ -167,9 +163,11 @@ resource "aws_ecs_service" "this" {
 
   load_balancer {
     target_group_arn = aws_lb_target_group.this.arn
-    container_name   = var.app_name
-    container_port   = var.container_port
+    container_name   = "ecs-fargate-lab"
+    container_port   = 8080
   }
 
-  depends_on = [aws_lb_listener.this]
+  depends_on = [
+    aws_lb_listener.this
+  ]
 }
