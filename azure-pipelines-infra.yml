@@ -2,6 +2,18 @@ trigger: none
 
 variables:
   - group: aws-lab-credentials
+  
+  - name: AWS_REGION
+    value: eu-central-1
+
+  - name: ECR_REPO
+    value: 895930755293.dkr.ecr.eu-central-1.amazonaws.com/ecs-fargate-lab-app
+
+  - name: IMAGE_TAG
+    value: $(Build.BuildId)
+
+  - name: ECR_IMAGE_URI
+    value: $(ECR_REPO):$(IMAGE_TAG)
 
 pool:
   vmImage: ubuntu-latest
