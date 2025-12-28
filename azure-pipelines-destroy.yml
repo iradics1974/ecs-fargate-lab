@@ -1,5 +1,7 @@
+# =================================================
 # Terraform DESTROY pipeline
 # Kontrollált infra törlés manuális approval-val
+# =================================================
 
 trigger: none
 
@@ -7,16 +9,19 @@ pool:
   vmImage: ubuntu-latest
 
 variables:
-- name: AWS_REGION
-  value: eu-central-1
-- name: TF_WORKING_DIR
-  value: terraform
-- group: aws-lab-credentials
+  - group: aws-lab-credentials
+
+  - name: AWS_REGION
+    value: eu-central-1
+
+  - name: TF_WORKING_DIR
+    value: terraform
 
 jobs:
 - deployment: terraform_destroy
   displayName: "Terraform destroy (manual approval)"
   environment: infra-approval
+
   strategy:
     runOnce:
       deploy:
@@ -29,7 +34,7 @@ jobs:
           inputs:
             terraformVersion: "1.6.6"
 
-        # 2️⃣ Terraform init
+        # 2️⃣ Terraform init (remote state)
         - bash: |
             terraform init -upgrade
           displayName: "Terraform init"
@@ -39,7 +44,17 @@ jobs:
             AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
             AWS_DEFAULT_REGION: $(AWS_REGION)
 
-        # 3️⃣ Terraform destroy
+        # 3️⃣ Terraform plan -destroy (ellenőrzés)
+        - bash: |
+            terraform plan -destroy
+          displayName: "Terraform plan -destroy"
+          workingDirectory: $(TF_WORKING_DIR)
+          env:
+            AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+            AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+            AWS_DEFAULT_REGION: $(AWS_REGION)
+
+        # 4️⃣ Terraform destroy
         - bash: |
             terraform destroy -auto-approve
           displayName: "Terraform destroy"
@@ -48,4 +63,3 @@ jobs:
             AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
             AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
             AWS_DEFAULT_REGION: $(AWS_REGION)
-            
