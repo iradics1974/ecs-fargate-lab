@@ -1,7 +1,5 @@
-
-
 ########################################
-# Data sources – default VPC
+# Data sources
 ########################################
 
 data "aws_vpc" "default" {
@@ -25,22 +23,24 @@ data "vault_kv_secret_v2" "db" {
 }
 
 ########################################
-# Variables
-########################################
-
-
-
-########################################
-# Security Groups
+# Security Group (MEGLÉVŐHÖZ IGAZÍTVA)
 ########################################
 
 resource "aws_security_group" "app_sg" {
-  name   = "ecs-fargate-lab-sg"
-  vpc_id = data.aws_vpc.default.id
+  name        = "ecs-fargate-lab-sg"
+  description = "Allow HTTP traffic to ECS Fargate app"
+  vpc_id      = data.aws_vpc.default.id
 
   ingress {
     from_port   = 80
     to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 8080
+    to_port     = 8080
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
@@ -54,19 +54,19 @@ resource "aws_security_group" "app_sg" {
 }
 
 ########################################
-# ECS Cluster
+# ECS Cluster (NÉV VISSZAIGAZÍTVA)
 ########################################
 
 resource "aws_ecs_cluster" "this" {
-  name = "ecs-fargate-lab-cluster"
+  name = "ecs-fargate-lab"
 }
 
 ########################################
-# IAM – ECS task execution role
+# IAM – ECS task execution role (NÉV FIX)
 ########################################
 
 resource "aws_iam_role" "ecs_task_execution_role" {
-  name = "ecs-fargate-lab-exec-role"
+  name = "ecs-fargate-lab-execution-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -84,7 +84,7 @@ resource "aws_iam_role_policy_attachment" "ecs_task_execution_role_policy" {
 }
 
 ########################################
-# RDS – subnet group + security group
+# RDS – subnet group + DB security group
 ########################################
 
 resource "aws_db_subnet_group" "db" {
@@ -112,7 +112,7 @@ resource "aws_security_group" "db_sg" {
 }
 
 ########################################
-# RDS – Postgres (DEV)
+# RDS – Postgres (ÚJ RESOURCE)
 ########################################
 
 resource "aws_db_instance" "db" {
@@ -132,14 +132,14 @@ resource "aws_db_instance" "db" {
   db_subnet_group_name   = aws_db_subnet_group.db.name
   vpc_security_group_ids = [aws_security_group.db_sg.id]
 
-  publicly_accessible     = false
-  skip_final_snapshot     = true
-  deletion_protection     = false
-  backup_retention_period = 0
+  publicly_accessible      = false
+  skip_final_snapshot      = true
+  deletion_protection      = false
+  backup_retention_period  = 0
 }
 
 ########################################
-# ECS Task Definition (DB env Vaultból)
+# ECS Task Definition (IMAGE FIXÁLT)
 ########################################
 
 resource "aws_ecs_task_definition" "this" {
@@ -162,17 +162,17 @@ resource "aws_ecs_task_definition" "this" {
       }]
 
       environment = [
-        { name = "DB_HOST",     value = aws_db_instance.db.address },
-        { name = "DB_NAME",     value = "app" },
-        { name = "DB_USER",     value = "appuser" },
-        { name = "DB_PASSWORD",value = data.vault_kv_secret_v2.db.data["password"] }
+        { name = "DB_HOST",      value = aws_db_instance.db.address },
+        { name = "DB_NAME",      value = "app" },
+        { name = "DB_USER",      value = "appuser" },
+        { name = "DB_PASSWORD",  value = data.vault_kv_secret_v2.db.data["password"] }
       ]
     }
   ])
 }
 
 ########################################
-# Load Balancer
+# Load Balancer (MEGLÉVŐ)
 ########################################
 
 resource "aws_lb" "this" {
@@ -206,11 +206,11 @@ resource "aws_lb_listener" "this" {
 }
 
 ########################################
-# ECS Service
+# ECS Service (NÉV FIX)
 ########################################
 
 resource "aws_ecs_service" "this" {
-  name            = "ecs-fargate-lab-service"
+  name            = "ecs-fargate-lab"
   cluster         = aws_ecs_cluster.this.id
   task_definition = aws_ecs_task_definition.this.arn
   desired_count   = 1
@@ -230,5 +230,3 @@ resource "aws_ecs_service" "this" {
 
   depends_on = [aws_lb_listener.this]
 }
-
-
