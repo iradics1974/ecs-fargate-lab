@@ -14,15 +14,6 @@ data "aws_subnets" "default" {
 }
 
 ########################################
-# Vault – DB secret
-########################################
-
-data "vault_kv_secret_v2" "db" {
-  mount = "secret"
-  name  = "app/db"
-}
-
-########################################
 # CloudWatch Logs (ECS)
 ########################################
 
@@ -32,7 +23,7 @@ resource "aws_cloudwatch_log_group" "ecs" {
 }
 
 ########################################
-# Security Group (meglévőhöz igazítva)
+# Security Group (APP)
 ########################################
 
 resource "aws_security_group" "app_sg" {
@@ -136,7 +127,7 @@ resource "aws_db_instance" "db" {
 
   db_name  = "app"
   username = "appuser"
-  password = data.vault_kv_secret_v2.db.data["password"]
+  password = "dummy-password-for-destroy"
 
   db_subnet_group_name   = aws_db_subnet_group.db.name
   vpc_security_group_ids = [aws_security_group.db_sg.id]
@@ -148,7 +139,7 @@ resource "aws_db_instance" "db" {
 }
 
 ########################################
-# ECS Task Definition (CloudWatch logolással)
+# ECS Task Definition
 ########################################
 
 resource "aws_ecs_task_definition" "this" {
@@ -171,10 +162,10 @@ resource "aws_ecs_task_definition" "this" {
       }]
 
       environment = [
-        { name = "DB_HOST",     value = aws_db_instance.db.address },
-        { name = "DB_NAME",     value = "app" },
-        { name = "DB_USER",     value = "appuser" },
-        { name = "DB_PASSWORD",value = data.vault_kv_secret_v2.db.data["password"] }
+        { name = "DB_HOST", value = "dummy" },
+        { name = "DB_NAME", value = "dummy" },
+        { name = "DB_USER", value = "dummy" },
+        { name = "DB_PASSWORD", value = "dummy" }
       ]
 
       logConfiguration = {
