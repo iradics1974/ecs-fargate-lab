@@ -1,5 +1,13 @@
 ########################################
-# Data sources
+# Provider
+########################################
+
+provider "aws" {
+  region = "eu-central-1"
+}
+
+########################################
+# Data sources – default VPC
 ########################################
 
 data "aws_vpc" "default" {
@@ -14,13 +22,30 @@ data "aws_subnets" "default" {
 }
 
 ########################################
-# Security Group
+# Variables
+########################################
+
+variable "ecr_image_uri" {
+  type = string
+}
+
+variable "db_username" {
+  type    = string
+  default = "appuser"
+}
+
+variable "db_password" {
+  type      = string
+  sensitive = true
+}
+
+########################################
+# Security Groups
 ########################################
 
 resource "aws_security_group" "app_sg" {
-  name        = "ecs-fargate-lab-sg"
-  description = "Allow HTTP traffic to ECS Fargate app"
-  vpc_id      = data.aws_vpc.default.id
+  name   = "ecs-fargate-lab-sg"
+  vpc_id = data.aws_vpc.default.id
 
   ingress {
     from_port   = 80
@@ -46,7 +71,7 @@ resource "aws_ecs_cluster" "this" {
 }
 
 ########################################
-# IAM Role for ECS Task Execution
+# IAM – ECS task execution
 ########################################
 
 resource "aws_iam_role" "ecs_task_execution_role" {
@@ -54,13 +79,11 @@ resource "aws_iam_role" "ecs_task_execution_role" {
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
-      {
-        Action    = "sts:AssumeRole"
-        Effect    = "Allow"
-        Principal = { Service = "ecs-tasks.amazonaws.com" }
-      }
-    ]
+    Statement = [{
+      Effect    = "Allow"
+      Action    = "sts:AssumeRole"
+      Principal = { Service = "ecs-tasks.amazonaws.com" }
+    }]
   })
 }
 
@@ -70,7 +93,62 @@ resource "aws_iam_role_policy_attachment" "ecs_task_execution_role_policy" {
 }
 
 ########################################
-# ECS Task Definition
+# RDS – subnet group + security group
+########################################
+
+resource "aws_db_subnet_group" "db" {
+  name       = "ecs-fargate-lab-db-subnet-group"
+  subnet_ids = data.aws_subnets.default.ids
+}
+
+resource "aws_security_group" "db_sg" {
+  name   = "ecs-fargate-lab-db-sg"
+  vpc_id = data.aws_vpc.default.id
+
+  ingress {
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
+    security_groups = [aws_security_group.app_sg.id]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+########################################
+# RDS – Postgres (DEV)
+########################################
+
+resource "aws_db_instance" "db" {
+  identifier = "ecs-fargate-lab-dev-db"
+
+  engine         = "postgres"
+  engine_version = "15.4"
+  instance_class = "db.t4g.micro"
+
+  allocated_storage = 20
+  storage_type      = "gp3"
+
+  db_name  = "app"
+  username = var.db_username
+  password = var.db_password
+
+  db_subnet_group_name   = aws_db_subnet_group.db.name
+  vpc_security_group_ids = [aws_security_group.db_sg.id]
+
+  publicly_accessible      = false
+  skip_final_snapshot      = true
+  deletion_protection      = false
+  backup_retention_period  = 0
+}
+
+########################################
+# ECS Task Definition (DB env-ekkel)
 ########################################
 
 resource "aws_ecs_task_definition" "this" {
@@ -87,18 +165,23 @@ resource "aws_ecs_task_definition" "this" {
       image     = var.ecr_image_uri
       essential = true
 
-      portMappings = [
-        {
-          containerPort = 8080
-          protocol      = "tcp"
-        }
+      portMappings = [{
+        containerPort = 8080
+        protocol      = "tcp"
+      }]
+
+      environment = [
+        { name = "DB_HOST",     value = aws_db_instance.db.address },
+        { name = "DB_NAME",     value = "app" },
+        { name = "DB_USER",     value = var.db_username },
+        { name = "DB_PASSWORD",value = var.db_password }
       ]
     }
   ])
 }
 
 ########################################
-# Load Balancer + Target Group
+# Load Balancer
 ########################################
 
 resource "aws_lb" "this" {
@@ -116,12 +199,7 @@ resource "aws_lb_target_group" "this" {
   target_type = "ip"
 
   health_check {
-    path                = "/"
-    healthy_threshold   = 2
-    unhealthy_threshold = 2
-    timeout             = 5
-    interval            = 30
-    matcher             = "200-399"
+    path = "/"
   }
 }
 
@@ -137,7 +215,7 @@ resource "aws_lb_listener" "this" {
 }
 
 ########################################
-# ECS Service (Fargate)
+# ECS Service
 ########################################
 
 resource "aws_ecs_service" "this" {
@@ -159,96 +237,17 @@ resource "aws_ecs_service" "this" {
     container_port   = 8080
   }
 
-  depends_on = [
-    aws_lb_listener.this
-  ]
+  depends_on = [aws_lb_listener.this]
 }
 
 ########################################
-# RDS Postgres (DEV) + Security
+# Outputs
 ########################################
 
-# If you already have these variables in another *.tf file, keep only one definition.
-variable "db_username" {
-  description = "RDS master username (dev)"
-  type        = string
-  default     = "appuser"
-}
-
-variable "db_password" {
-  description = "RDS master password (dev). Provide via -var / *.tfvars / environment."
-  type        = string
-  sensitive   = true
-}
-
-# Subnet group for RDS (uses all subnets in the default VPC)
-resource "aws_db_subnet_group" "db" {
-  name       = "ecs-fargate-lab-db-subnet-group"
-  subnet_ids = data.aws_subnets.default.ids
-
-  tags = {
-    Name = "ecs-fargate-lab-db-subnet-group"
-  }
-}
-
-# DB security group: only allow Postgres from the ECS tasks' security group
-resource "aws_security_group" "db_sg" {
-  name        = "ecs-fargate-lab-db-sg"
-  description = "Allow Postgres from ECS tasks"
-  vpc_id      = data.aws_vpc.default.id
-
-  ingress {
-    description     = "Postgres from ECS tasks"
-    from_port       = 5432
-    to_port         = 5432
-    protocol        = "tcp"
-    security_groups = [aws_security_group.app_sg.id]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name = "ecs-fargate-lab-db-sg"
-  }
-}
-
-# Minimal dev RDS instance (Postgres)
-resource "aws_db_instance" "db" {
-  identifier = "ecs-fargate-lab-dev-db"
-
-  engine         = "postgres"
-  engine_version = "15.4"
-  instance_class = "db.t4g.micro"
-
-  allocated_storage = 20
-  storage_type      = "gp3"
-
-  db_name  = "app"
-  username = var.db_username
-  password = var.db_password
-
-  db_subnet_group_name   = aws_db_subnet_group.db.name
-  vpc_security_group_ids = [aws_security_group.db_sg.id]
-
-  publicly_accessible = false
-
-  # DEV-only convenience settings
-  skip_final_snapshot     = true
-  deletion_protection     = false
-  backup_retention_period = 0
-
-  tags = {
-    Name        = "ecs-fargate-lab-dev-db"
-    Environment = "dev"
-  }
+output "alb_dns_name" {
+  value = aws_lb.this.dns_name
 }
 
 output "db_endpoint" {
-  description = "RDS endpoint hostname (use as DB_HOST)"
-  value       = aws_db_instance.db.address
+  value = aws_db_instance.db.address
 }
