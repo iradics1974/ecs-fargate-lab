@@ -119,7 +119,7 @@ resource "aws_db_instance" "db" {
   identifier = "ecs-fargate-lab-dev-db"
 
   engine         = "postgres"
-  engine_version = "15.4"
+  engine_version = "15"
   instance_class = "db.t4g.micro"
 
   allocated_storage = 20
