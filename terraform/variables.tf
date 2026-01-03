@@ -20,3 +20,27 @@ variable "ecr_image_uri" {
   description = "Full ECR image URI with tag"
   type        = string
 }
+
+variable "db_name" {
+  description = "PostgreSQL database name"
+  type        = string
+  default     = "appdb"
+}
+
+variable "db_username" {
+  description = "PostgreSQL master username"
+  type        = string
+  default     = "appuser"
+}
+
+variable "db_instance_class" {
+  description = "RDS instance class"
+  type        = string
+  default     = "db.t4g.micro"
+}
+
+variable "db_allocated_storage" {
+  description = "Allocated storage (GB)"
+  type        = number
+  default     = 20
+}

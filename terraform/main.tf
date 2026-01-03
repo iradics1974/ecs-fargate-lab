@@ -29,13 +29,6 @@ resource "aws_security_group" "app_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  ingress {
-    from_port   = 8080
-    to_port     = 8080
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
   egress {
     from_port   = 0
     to_port     = 0
@@ -49,7 +42,7 @@ resource "aws_security_group" "app_sg" {
 ########################################
 
 resource "aws_ecs_cluster" "this" {
-  name = "ecs-fargate-lab"
+  name = "ecs-fargate-lab-cluster"
 }
 
 ########################################
@@ -57,17 +50,17 @@ resource "aws_ecs_cluster" "this" {
 ########################################
 
 resource "aws_iam_role" "ecs_task_execution_role" {
-  name = "ecs-fargate-lab-execution-role"
+  name = "ecs-fargate-lab-exec-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Principal = {
-        Service = "ecs-tasks.amazonaws.com"
+    Statement = [
+      {
+        Action    = "sts:AssumeRole"
+        Effect    = "Allow"
+        Principal = { Service = "ecs-tasks.amazonaws.com" }
       }
-      Action = "sts:AssumeRole"
-    }]
+    ]
   })
 }
 
@@ -124,12 +117,11 @@ resource "aws_lb_target_group" "this" {
 
   health_check {
     path                = "/"
-    protocol            = "HTTP"
-    matcher             = "200"
-    interval            = 30
-    timeout             = 5
     healthy_threshold   = 2
     unhealthy_threshold = 2
+    timeout             = 5
+    interval            = 30
+    matcher             = "200-399"
   }
 }
 
@@ -145,11 +137,11 @@ resource "aws_lb_listener" "this" {
 }
 
 ########################################
-# ECS Service  (KRITIKUS BLOKK)
+# ECS Service (Fargate)
 ########################################
 
 resource "aws_ecs_service" "this" {
-  name            = "ecs-fargate-lab"
+  name            = "ecs-fargate-lab-service"
   cluster         = aws_ecs_cluster.this.id
   task_definition = aws_ecs_task_definition.this.arn
   desired_count   = 1
@@ -170,4 +162,93 @@ resource "aws_ecs_service" "this" {
   depends_on = [
     aws_lb_listener.this
   ]
+}
+
+########################################
+# RDS Postgres (DEV) + Security
+########################################
+
+# If you already have these variables in another *.tf file, keep only one definition.
+variable "db_username" {
+  description = "RDS master username (dev)"
+  type        = string
+  default     = "appuser"
+}
+
+variable "db_password" {
+  description = "RDS master password (dev). Provide via -var / *.tfvars / environment."
+  type        = string
+  sensitive   = true
+}
+
+# Subnet group for RDS (uses all subnets in the default VPC)
+resource "aws_db_subnet_group" "db" {
+  name       = "ecs-fargate-lab-db-subnet-group"
+  subnet_ids = data.aws_subnets.default.ids
+
+  tags = {
+    Name = "ecs-fargate-lab-db-subnet-group"
+  }
+}
+
+# DB security group: only allow Postgres from the ECS tasks' security group
+resource "aws_security_group" "db_sg" {
+  name        = "ecs-fargate-lab-db-sg"
+  description = "Allow Postgres from ECS tasks"
+  vpc_id      = data.aws_vpc.default.id
+
+  ingress {
+    description     = "Postgres from ECS tasks"
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
+    security_groups = [aws_security_group.app_sg.id]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "ecs-fargate-lab-db-sg"
+  }
+}
+
+# Minimal dev RDS instance (Postgres)
+resource "aws_db_instance" "db" {
+  identifier = "ecs-fargate-lab-dev-db"
+
+  engine         = "postgres"
+  engine_version = "15.4"
+  instance_class = "db.t4g.micro"
+
+  allocated_storage = 20
+  storage_type      = "gp3"
+
+  db_name  = "app"
+  username = var.db_username
+  password = var.db_password
+
+  db_subnet_group_name   = aws_db_subnet_group.db.name
+  vpc_security_group_ids = [aws_security_group.db_sg.id]
+
+  publicly_accessible = false
+
+  # DEV-only convenience settings
+  skip_final_snapshot     = true
+  deletion_protection     = false
+  backup_retention_period = 0
+
+  tags = {
+    Name        = "ecs-fargate-lab-dev-db"
+    Environment = "dev"
+  }
+}
+
+output "db_endpoint" {
+  description = "RDS endpoint hostname (use as DB_HOST)"
+  value       = aws_db_instance.db.address
 }
