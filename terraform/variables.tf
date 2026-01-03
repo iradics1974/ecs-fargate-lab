@@ -17,8 +17,8 @@ variable "container_port" {
 }
 
 variable "ecr_image_uri" {
-  description = "Full ECR image URI with tag"
-  type        = string
+  type    = string
+  default = "895930755293.dkr.ecr.eu-central-1.amazonaws.com/ecs-fargate-lab-app:124"
 }
 
 variable "db_name" {
