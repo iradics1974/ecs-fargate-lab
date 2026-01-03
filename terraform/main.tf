@@ -1,10 +1,4 @@
-########################################
-# Provider
-########################################
 
-provider "aws" {
-  region = "eu-central-1"
-}
 
 ########################################
 # Data sources – default VPC
@@ -22,22 +16,19 @@ data "aws_subnets" "default" {
 }
 
 ########################################
+# Vault – DB secret
+########################################
+
+data "vault_kv_secret_v2" "db" {
+  mount = "secret"
+  name  = "app/db"
+}
+
+########################################
 # Variables
 ########################################
 
-variable "ecr_image_uri" {
-  type = string
-}
 
-variable "db_username" {
-  type    = string
-  default = "appuser"
-}
-
-variable "db_password" {
-  type      = string
-  sensitive = true
-}
 
 ########################################
 # Security Groups
@@ -71,7 +62,7 @@ resource "aws_ecs_cluster" "this" {
 }
 
 ########################################
-# IAM – ECS task execution
+# IAM – ECS task execution role
 ########################################
 
 resource "aws_iam_role" "ecs_task_execution_role" {
@@ -135,20 +126,20 @@ resource "aws_db_instance" "db" {
   storage_type      = "gp3"
 
   db_name  = "app"
-  username = var.db_username
-  password = var.db_password
+  username = "appuser"
+  password = data.vault_kv_secret_v2.db.data["password"]
 
   db_subnet_group_name   = aws_db_subnet_group.db.name
   vpc_security_group_ids = [aws_security_group.db_sg.id]
 
-  publicly_accessible      = false
-  skip_final_snapshot      = true
-  deletion_protection      = false
-  backup_retention_period  = 0
+  publicly_accessible     = false
+  skip_final_snapshot     = true
+  deletion_protection     = false
+  backup_retention_period = 0
 }
 
 ########################################
-# ECS Task Definition (DB env-ekkel)
+# ECS Task Definition (DB env Vaultból)
 ########################################
 
 resource "aws_ecs_task_definition" "this" {
@@ -173,8 +164,8 @@ resource "aws_ecs_task_definition" "this" {
       environment = [
         { name = "DB_HOST",     value = aws_db_instance.db.address },
         { name = "DB_NAME",     value = "app" },
-        { name = "DB_USER",     value = var.db_username },
-        { name = "DB_PASSWORD",value = var.db_password }
+        { name = "DB_USER",     value = "appuser" },
+        { name = "DB_PASSWORD",value = data.vault_kv_secret_v2.db.data["password"] }
       ]
     }
   ])
@@ -240,14 +231,4 @@ resource "aws_ecs_service" "this" {
   depends_on = [aws_lb_listener.this]
 }
 
-########################################
-# Outputs
-########################################
 
-output "alb_dns_name" {
-  value = aws_lb.this.dns_name
-}
-
-output "db_endpoint" {
-  value = aws_db_instance.db.address
-}
