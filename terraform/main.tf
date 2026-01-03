@@ -23,7 +23,16 @@ data "vault_kv_secret_v2" "db" {
 }
 
 ########################################
-# Security Group (MEGLÉVŐHÖZ IGAZÍTVA)
+# CloudWatch Logs (ECS)
+########################################
+
+resource "aws_cloudwatch_log_group" "ecs" {
+  name              = "/ecs/ecs-fargate-lab"
+  retention_in_days = 7
+}
+
+########################################
+# Security Group (meglévőhöz igazítva)
 ########################################
 
 resource "aws_security_group" "app_sg" {
@@ -54,7 +63,7 @@ resource "aws_security_group" "app_sg" {
 }
 
 ########################################
-# ECS Cluster (NÉV VISSZAIGAZÍTVA)
+# ECS Cluster
 ########################################
 
 resource "aws_ecs_cluster" "this" {
@@ -62,7 +71,7 @@ resource "aws_ecs_cluster" "this" {
 }
 
 ########################################
-# IAM – ECS task execution role (NÉV FIX)
+# IAM – ECS task execution role
 ########################################
 
 resource "aws_iam_role" "ecs_task_execution_role" {
@@ -112,7 +121,7 @@ resource "aws_security_group" "db_sg" {
 }
 
 ########################################
-# RDS – Postgres (ÚJ RESOURCE)
+# RDS – Postgres (DEV)
 ########################################
 
 resource "aws_db_instance" "db" {
@@ -132,14 +141,14 @@ resource "aws_db_instance" "db" {
   db_subnet_group_name   = aws_db_subnet_group.db.name
   vpc_security_group_ids = [aws_security_group.db_sg.id]
 
-  publicly_accessible      = false
-  skip_final_snapshot      = true
-  deletion_protection      = false
-  backup_retention_period  = 0
+  publicly_accessible     = false
+  skip_final_snapshot     = true
+  deletion_protection     = false
+  backup_retention_period = 0
 }
 
 ########################################
-# ECS Task Definition (IMAGE FIXÁLT)
+# ECS Task Definition (CloudWatch logolással)
 ########################################
 
 resource "aws_ecs_task_definition" "this" {
@@ -162,17 +171,26 @@ resource "aws_ecs_task_definition" "this" {
       }]
 
       environment = [
-        { name = "DB_HOST",      value = aws_db_instance.db.address },
-        { name = "DB_NAME",      value = "app" },
-        { name = "DB_USER",      value = "appuser" },
-        { name = "DB_PASSWORD",  value = data.vault_kv_secret_v2.db.data["password"] }
+        { name = "DB_HOST",     value = aws_db_instance.db.address },
+        { name = "DB_NAME",     value = "app" },
+        { name = "DB_USER",     value = "appuser" },
+        { name = "DB_PASSWORD",value = data.vault_kv_secret_v2.db.data["password"] }
       ]
+
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.ecs.name
+          awslogs-region        = var.aws_region
+          awslogs-stream-prefix = "ecs"
+        }
+      }
     }
   ])
 }
 
 ########################################
-# Load Balancer (MEGLÉVŐ)
+# Load Balancer
 ########################################
 
 resource "aws_lb" "this" {
@@ -206,7 +224,7 @@ resource "aws_lb_listener" "this" {
 }
 
 ########################################
-# ECS Service (NÉV FIX)
+# ECS Service
 ########################################
 
 resource "aws_ecs_service" "this" {
@@ -228,5 +246,8 @@ resource "aws_ecs_service" "this" {
     container_port   = 8080
   }
 
-  depends_on = [aws_lb_listener.this]
+  depends_on = [
+    aws_lb_listener.this,
+    aws_cloudwatch_log_group.ecs
+  ]
 }
