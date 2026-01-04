@@ -1,0 +1,13 @@
+# Node.js
+node_modules/
+npm-debug.log
+
+# OS / editor
+.DS_Store
+.vscode/
+
+# Terraform
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/.terraform.lock.hcl
