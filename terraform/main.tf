@@ -14,7 +14,7 @@ data "aws_subnets" "default" {
 }
 
 ########################################
-# CloudWatch Logs (ECS)
+# CloudWatch Logs
 ########################################
 
 resource "aws_cloudwatch_log_group" "ecs" {
@@ -23,13 +23,13 @@ resource "aws_cloudwatch_log_group" "ecs" {
 }
 
 ########################################
-# Security Group (APP)
+# Security Groups
 ########################################
 
+# App / ECS
 resource "aws_security_group" "app_sg" {
-  name        = "ecs-fargate-lab-sg"
-  description = "Allow HTTP traffic to ECS Fargate app"
-  vpc_id      = data.aws_vpc.default.id
+  name   = "ecs-fargate-lab-app-sg"
+  vpc_id = data.aws_vpc.default.id
 
   ingress {
     from_port   = 80
@@ -43,6 +43,26 @@ resource "aws_security_group" "app_sg" {
     to_port     = 8080
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+# DB
+resource "aws_security_group" "db_sg" {
+  name   = "ecs-fargate-lab-db-sg"
+  vpc_id = data.aws_vpc.default.id
+
+  ingress {
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
+    security_groups = [aws_security_group.app_sg.id]
   }
 
   egress {
@@ -78,42 +98,50 @@ resource "aws_iam_role" "ecs_task_execution_role" {
   })
 }
 
-resource "aws_iam_role_policy_attachment" "ecs_task_execution_role_policy" {
+resource "aws_iam_role_policy_attachment" "ecs_execution_base" {
   role       = aws_iam_role.ecs_task_execution_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
 ########################################
-# RDS – subnet group + DB security group
+# AWS Secrets Manager – DB password
+########################################
+
+resource "aws_secretsmanager_secret" "db_password" {
+  name                    = "ecs-fargate-lab/db/password"
+  description             = "DB password for ecs-fargate-lab"
+  recovery_window_in_days = 0
+}
+
+resource "aws_secretsmanager_secret_version" "db_password" {
+  secret_id = aws_secretsmanager_secret.db_password.id
+  secret_string = jsonencode({
+    password = var.db_password
+  })
+}
+
+resource "aws_iam_role_policy" "ecs_secrets_access" {
+  name = "ecs-secrets-access"
+  role = aws_iam_role.ecs_task_execution_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["secretsmanager:GetSecretValue"]
+      Resource = aws_secretsmanager_secret.db_password.arn
+    }]
+  })
+}
+
+########################################
+# RDS – Postgres (DEV)
 ########################################
 
 resource "aws_db_subnet_group" "db" {
   name       = "ecs-fargate-lab-db-subnet-group"
   subnet_ids = data.aws_subnets.default.ids
 }
-
-resource "aws_security_group" "db_sg" {
-  name   = "ecs-fargate-lab-db-sg"
-  vpc_id = data.aws_vpc.default.id
-
-  ingress {
-    from_port       = 5432
-    to_port         = 5432
-    protocol        = "tcp"
-    security_groups = [aws_security_group.app_sg.id]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-}
-
-########################################
-# RDS – Postgres (DEV)
-########################################
 
 resource "aws_db_instance" "db" {
   identifier = "ecs-fargate-lab-dev-db"
@@ -127,7 +155,7 @@ resource "aws_db_instance" "db" {
 
   db_name  = "app"
   username = "appuser"
-  password = "dummy-password-for-destroy"
+  password = var.db_password
 
   db_subnet_group_name   = aws_db_subnet_group.db.name
   vpc_security_group_ids = [aws_security_group.db_sg.id]
@@ -162,10 +190,16 @@ resource "aws_ecs_task_definition" "this" {
       }]
 
       environment = [
-        { name = "DB_HOST", value = "dummy" },
-        { name = "DB_NAME", value = "dummy" },
-        { name = "DB_USER", value = "dummy" },
-        { name = "DB_PASSWORD", value = "dummy" }
+        { name = "DB_HOST", value = aws_db_instance.db.address },
+        { name = "DB_NAME", value = "app" },
+        { name = "DB_USER", value = "appuser" }
+      ]
+
+      secrets = [
+        {
+          name      = "DB_PASSWORD"
+          valueFrom = aws_secretsmanager_secret.db_password.arn
+        }
       ]
 
       logConfiguration = {
