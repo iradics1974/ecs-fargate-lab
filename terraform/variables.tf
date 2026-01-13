@@ -45,9 +45,5 @@ variable "db_allocated_storage" {
   default     = 20
 }
 
-variable "db_password" {
-  description = "Database password"
-  type        = string
-  sensitive   = true
-}
+
 
