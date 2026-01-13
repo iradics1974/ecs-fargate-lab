@@ -1,4 +1,27 @@
 ########################################
+# Providers & basics
+########################################
+
+terraform {
+  required_version = ">= 1.5.0"
+
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.6"
+    }
+  }
+}
+
+provider "aws" {
+  region = var.aws_region
+}
+
+########################################
 # Data sources
 ########################################
 
@@ -104,19 +127,26 @@ resource "aws_iam_role_policy_attachment" "ecs_execution_base" {
 }
 
 ########################################
-# AWS Secrets Manager – DB password
+# Secrets Manager – DB credentials
 ########################################
 
-resource "aws_secretsmanager_secret" "db_password" {
-  name                    = "ecs-fargate-lab/db/password"
-  description             = "DB password for ecs-fargate-lab"
+resource "random_password" "db" {
+  length  = 20
+  special = true
+}
+
+resource "aws_secretsmanager_secret" "db" {
+  name                    = "ecs-fargate-lab/db"
+  description             = "DB credentials for ecs-fargate-lab"
   recovery_window_in_days = 0
 }
 
-resource "aws_secretsmanager_secret_version" "db_password" {
-  secret_id = aws_secretsmanager_secret.db_password.id
+resource "aws_secretsmanager_secret_version" "db" {
+  secret_id = aws_secretsmanager_secret.db.id
+
   secret_string = jsonencode({
-    password = var.db_password
+    username = "appuser"
+    password = random_password.db.result
   })
 }
 
@@ -129,7 +159,7 @@ resource "aws_iam_role_policy" "ecs_secrets_access" {
     Statement = [{
       Effect   = "Allow"
       Action   = ["secretsmanager:GetSecretValue"]
-      Resource = aws_secretsmanager_secret.db_password.arn
+      Resource = aws_secretsmanager_secret.db.arn
     }]
   })
 }
@@ -153,9 +183,15 @@ resource "aws_db_instance" "db" {
   allocated_storage = 20
   storage_type      = "gp3"
 
-  db_name  = "app"
-  username = "appuser"
-  password = var.db_password
+  db_name = "app"
+
+  username = jsondecode(
+    aws_secretsmanager_secret_version.db.secret_string
+  ).username
+
+  password = jsondecode(
+    aws_secretsmanager_secret_version.db.secret_string
+  ).password
 
   db_subnet_group_name   = aws_db_subnet_group.db.name
   vpc_security_group_ids = [aws_security_group.db_sg.id]
@@ -198,7 +234,7 @@ resource "aws_ecs_task_definition" "this" {
       secrets = [
         {
           name      = "DB_PASSWORD"
-          valueFrom = aws_secretsmanager_secret.db_password.arn
+          valueFrom = aws_secretsmanager_secret.db.arn
         }
       ]
 
