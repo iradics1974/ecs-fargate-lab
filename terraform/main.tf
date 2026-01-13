@@ -131,8 +131,9 @@ resource "aws_iam_role_policy_attachment" "ecs_execution_base" {
 ########################################
 
 resource "random_password" "db" {
-  length  = 20
-  special = true
+  length           = 20
+  special          = true
+  override_special = "!@#%^*-_+="
 }
 
 resource "aws_secretsmanager_secret" "db" {
@@ -173,6 +174,12 @@ resource "aws_db_subnet_group" "db" {
   subnet_ids = data.aws_subnets.default.ids
 }
 
+locals {
+  db_credentials = jsondecode(
+    aws_secretsmanager_secret_version.db.secret_string
+  )
+}
+
 resource "aws_db_instance" "db" {
   identifier = "ecs-fargate-lab-dev-db"
 
@@ -183,15 +190,9 @@ resource "aws_db_instance" "db" {
   allocated_storage = 20
   storage_type      = "gp3"
 
-  db_name = "app"
-
-  username = jsondecode(
-    aws_secretsmanager_secret_version.db.secret_string
-  ).username
-
-  password = jsondecode(
-    aws_secretsmanager_secret_version.db.secret_string
-  ).password
+  db_name  = "app"
+  username = local.db_credentials.username
+  password = local.db_credentials.password
 
   db_subnet_group_name   = aws_db_subnet_group.db.name
   vpc_security_group_ids = [aws_security_group.db_sg.id]
