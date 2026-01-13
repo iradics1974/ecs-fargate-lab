@@ -1,54 +1,60 @@
-# Pipeline akkor indul, ha a main branch-re commit érkezik
+# =========================================================
+# App build pipeline
+# - Trigger: main branch
+# - Only if app-related files change
+# - Build Docker image and push to AWS ECR
+# =========================================================
+
 trigger:
   branches:
     include:
       - main
+  paths:
+    include:
+      - app/**
+      - Dockerfile
+      - package.json
+      - package-lock.json
 
-# Microsoft-hosted Linux agent
 pool:
   vmImage: ubuntu-latest
 
-# Pipeline-szintű változók (nem secret-ek)
 variables:
   AWS_REGION: eu-central-1
+  AWS_ACCOUNT_ID: "895930755293"
   ECR_REPO: ecs-fargate-lab-app
   IMAGE_TAG: $(Build.BuildId)
 
 steps:
-  # 1️⃣ Repo checkout
   - checkout: self
 
-  # 2️⃣ AWS ECR login
-  # AWS CLI token-t kér ECR-hez, majd docker login-t csinál
+  # 1️⃣ Login to Amazon ECR
   - script: |
       echo "Logging in to Amazon ECR..."
-      aws ecr get-login-password --region $AWS_REGION \
+      aws ecr get-login-password --region $(AWS_REGION) \
         | docker login --username AWS --password-stdin \
-          ${AWS_ACCOUNT_ID}.dkr.ecr.$AWS_REGION.amazonaws.com
+          $(AWS_ACCOUNT_ID).dkr.ecr.$(AWS_REGION).amazonaws.com
     displayName: "Login to ECR"
     env:
-      # AWS credentialek Azure DevOps secret variable-ből
       AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
       AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
-      AWS_DEFAULT_REGION: $(AWS_DEFAULT_REGION)
 
-  # 3️⃣ Docker image build
-  # A ./app mappában lévő Dockerfile alapján
+  # 2️⃣ Build Docker image
   - script: |
       echo "Building Docker image..."
-      docker build -t $ECR_REPO:$IMAGE_TAG ./app
+      docker build -t $(ECR_REPO):$(IMAGE_TAG) ./app
     displayName: "Build Docker image"
 
-  # 4️⃣ Docker image tag-elése ECR URI-ra
+  # 3️⃣ Tag Docker image for ECR
   - script: |
       echo "Tagging Docker image..."
-      docker tag $ECR_REPO:$IMAGE_TAG \
-        ${AWS_ACCOUNT_ID}.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:$IMAGE_TAG
+      docker tag $(ECR_REPO):$(IMAGE_TAG) \
+        $(AWS_ACCOUNT_ID).dkr.ecr.$(AWS_REGION).amazonaws.com/$(ECR_REPO):$(IMAGE_TAG)
     displayName: "Tag Docker image"
 
-  # 5️⃣ Docker image push ECR-be
+  # 4️⃣ Push Docker image to ECR
   - script: |
       echo "Pushing Docker image to ECR..."
       docker push \
-        ${AWS_ACCOUNT_ID}.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:$IMAGE_TAG
+        $(AWS_ACCOUNT_ID).dkr.ecr.$(AWS_REGION).amazonaws.com/$(ECR_REPO):$(IMAGE_TAG)
     displayName: "Push Docker image"

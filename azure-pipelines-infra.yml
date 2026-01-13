@@ -5,7 +5,6 @@ parameters:
     displayName: "ECR image tag to deploy"
     type: string
 
-
 variables:
   - group: aws-lab-credentials
 
@@ -22,6 +21,7 @@ pool:
   vmImage: ubuntu-latest
 
 stages:
+
 # =================================================
 # STAGE 1: Terraform PLAN
 # =================================================
@@ -39,22 +39,22 @@ stages:
       env:
         AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
         AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
-        AWS_DEFAULT_REGION: eu-central-1
+        AWS_DEFAULT_REGION: $(AWS_REGION)
 
     - task: TerraformInstaller@1
       displayName: "Install Terraform"
       inputs:
-        terraformVersion: "latest"
+        terraformVersion: "1.6.6"
 
     - bash: |
         set -e
-        terraform init -input=false
+        terraform init -upgrade -input=false
       displayName: "Terraform init (plan)"
       workingDirectory: terraform
       env:
         AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
         AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
-        AWS_DEFAULT_REGION: eu-central-1
+        AWS_DEFAULT_REGION: $(AWS_REGION)
 
     - bash: |
         set -e
@@ -65,7 +65,7 @@ stages:
       env:
         AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
         AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
-        AWS_DEFAULT_REGION: eu-central-1
+        AWS_DEFAULT_REGION: $(AWS_REGION)
 
 # =================================================
 # STAGE 2: Manual Approval
@@ -100,7 +100,7 @@ stages:
     - task: TerraformInstaller@1
       displayName: "Install Terraform"
       inputs:
-        terraformVersion: "latest"
+        terraformVersion: "1.6.6"
 
     - bash: |
         set -e
@@ -110,7 +110,7 @@ stages:
       env:
         AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
         AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
-        AWS_DEFAULT_REGION: eu-central-1
+        AWS_DEFAULT_REGION: $(AWS_REGION)
 
     - bash: |
         set -e
@@ -121,4 +121,4 @@ stages:
       env:
         AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
         AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
-        AWS_DEFAULT_REGION: eu-central-1
+        AWS_DEFAULT_REGION: $(AWS_REGION)
