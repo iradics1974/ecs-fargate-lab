@@ -1,8 +1,6 @@
 # =================================================
-# Terraform DESTROY pipeline
-# Kontrollált infra törlés manuális approval-val
+# Terraform DESTROY pipeline (manual approval)
 # =================================================
-
 trigger: none
 
 pool:
@@ -28,13 +26,11 @@ jobs:
         steps:
         - checkout: self
 
-        # 1️⃣ Terraform telepítése
         - task: TerraformInstaller@1
           displayName: "Install Terraform"
           inputs:
             terraformVersion: "1.6.6"
 
-        # 2️⃣ Terraform init (remote state)
         - bash: |
             terraform init -upgrade
           displayName: "Terraform init"
@@ -44,10 +40,10 @@ jobs:
             AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
             AWS_DEFAULT_REGION: $(AWS_REGION)
 
-        # 3️⃣ Terraform plan -destroy (ellenőrzés)
         - bash: |
-            terraform plan -destroy \
-              -var="ecr_image_uri=dummy"
+            terraform plan -destroy -input=false \
+              -var="ecr_image_uri=dummy" \
+              -var="db_password=dummy_password_12345"
           displayName: "Terraform plan -destroy"
           workingDirectory: $(TF_WORKING_DIR)
           env:
@@ -55,10 +51,10 @@ jobs:
             AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
             AWS_DEFAULT_REGION: $(AWS_REGION)
 
-        # 4️⃣ Terraform destroy
         - bash: |
-            terraform destroy -auto-approve \
-              -var="ecr_image_uri=dummy"
+            terraform destroy -auto-approve -input=false \
+              -var="ecr_image_uri=dummy" \
+              -var="db_password=dummy_password_12345"
           displayName: "Terraform destroy"
           workingDirectory: $(TF_WORKING_DIR)
           env:
