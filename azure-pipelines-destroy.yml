@@ -43,7 +43,7 @@ jobs:
         - bash: |
             terraform plan -destroy -input=false \
               -var="ecr_image_uri=dummy" \
-              -var="db_password=dummy_password_12345"
+              
           displayName: "Terraform plan -destroy"
           workingDirectory: $(TF_WORKING_DIR)
           env:
@@ -54,7 +54,7 @@ jobs:
         - bash: |
             terraform destroy -auto-approve -input=false \
               -var="ecr_image_uri=dummy" \
-              -var="db_password=dummy_password_12345"
+              
           displayName: "Terraform destroy"
           workingDirectory: $(TF_WORKING_DIR)
           env:
