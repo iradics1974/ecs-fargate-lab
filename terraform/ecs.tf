@@ -130,7 +130,7 @@ resource "aws_ecs_task_definition" "this" {
       ]
 
       healthCheck = {
-        command     = ["CMD-SHELL", "wget -qO- http://localhost:8080 || exit 1"]
+        command     = ["CMD-SHELL", "wget -qO- http://localhost:80 || exit 1"]
         interval    = 30
         timeout     = 5
         retries     = 3
