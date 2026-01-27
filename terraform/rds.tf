@@ -19,7 +19,7 @@ resource "aws_db_instance" "this" {
   identifier = "ecs-fargate-lab-postgres"
 
   engine         = "postgres"
-  engine_version = "15.3"
+  engine_version = "15"
 
   instance_class    = "db.t3.micro"
   allocated_storage = 20
