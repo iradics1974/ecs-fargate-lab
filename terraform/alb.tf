@@ -21,13 +21,13 @@ resource "aws_lb" "this" {
 
 resource "aws_lb_target_group" "this" {
   name        = "ecs-fargate-lab-tg"
-  port        = 8080
+  port        = 80
   protocol    = "HTTP"
   vpc_id      = aws_vpc.this.id
   target_type = "ip"
 
   health_check {
-    path                = "/health"
+    path                = "/"
     protocol            = "HTTP"
     matcher             = "200"
     interval            = 30
