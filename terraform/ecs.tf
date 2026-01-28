@@ -74,10 +74,11 @@ resource "aws_iam_policy" "ecs_secrets_read" {
   })
 }
 
-resource "aws_iam_role_policy_attachment" "ecs_task_secrets" {
-  role       = aws_iam_role.ecs_task.name
+resource "aws_iam_role_policy_attachment" "ecs_execution_secrets" {
+  role       = aws_iam_role.ecs_task_execution.name
   policy_arn = aws_iam_policy.ecs_secrets_read.arn
 }
+
 
 ########################################
 # ECS Task Definition
