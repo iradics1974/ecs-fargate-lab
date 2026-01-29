@@ -97,7 +97,7 @@ resource "aws_ecs_task_definition" "this" {
   container_definitions = jsonencode([
     {
       name      = "app"
-      image     = "nginx:alpine"
+      image     = var.ecr_image_uri
       essential = true
 
       portMappings = [
