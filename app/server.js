@@ -22,7 +22,9 @@ const pool = new Pool({
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   port: 5432,
-  ssl: false // RDS in private subnet doesn't need SSL
+  ssl: {
+    rejectUnauthorized: false // For RDS, we can use this for simplicity
+  }
 });
 
 // ---- MIDDLEWARE ----
