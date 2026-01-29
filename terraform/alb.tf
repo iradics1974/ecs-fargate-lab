@@ -20,7 +20,7 @@ resource "aws_lb" "this" {
 ########################################
 
 resource "aws_lb_target_group" "this" {
-  name        = "ecs-fargate-lab-tg"
+  name        = "ecs-fargate-lab-tg-${var.container_port}"
   port        = var.container_port
   protocol    = "HTTP"
   vpc_id      = aws_vpc.this.id
@@ -36,8 +36,12 @@ resource "aws_lb_target_group" "this" {
     unhealthy_threshold = 2
   }
 
+  lifecycle {
+    create_before_destroy = true
+  }
+
   tags = {
-    Name = "ecs-fargate-lab-tg"
+    Name = "ecs-fargate-lab-tg-${var.container_port}"
   }
 }
 
