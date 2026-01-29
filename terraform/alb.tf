@@ -21,7 +21,7 @@ resource "aws_lb" "this" {
 
 resource "aws_lb_target_group" "this" {
   name        = "ecs-fargate-lab-tg"
-  port        = 80
+  port        = var.container_port
   protocol    = "HTTP"
   vpc_id      = aws_vpc.this.id
   target_type = "ip"
