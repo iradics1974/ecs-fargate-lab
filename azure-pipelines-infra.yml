@@ -4,8 +4,7 @@ parameters:
   - name: imageTag
     displayName: "ECR image tag to deploy (optional - leave empty for latest)"
     type: string
-    default: " "
-    required: false
+    default: "latest"
 
 variables:
   - group: aws-lab-credentials
@@ -42,8 +41,8 @@ stages:
 
     - bash: |
         set -e
-        if [ -z "${{ parameters.imageTag }}" ]; then
-          echo "No tag specified, getting latest from ECR..."
+        if [ "${{ parameters.imageTag }}" = "latest" ] || [ -z "${{ parameters.imageTag }}" ]; then
+          echo "Getting latest tag from ECR..."
           LATEST_TAG=$(aws ecr describe-images --repository-name ecs-fargate-lab-app --query 'sort_by(imageDetails,&imagePushedAt)[-1].imageTags[0]' --output text)
           echo "Latest tag: $LATEST_TAG"
           echo "##vso[task.setvariable variable=ECR_IMAGE_URI]$(ECR_REPO):$LATEST_TAG"
