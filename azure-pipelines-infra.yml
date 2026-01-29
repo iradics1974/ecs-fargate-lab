@@ -2,8 +2,9 @@ trigger: none
 
 parameters:
   - name: imageTag
-    displayName: "ECR image tag to deploy"
+    displayName: "ECR image tag to deploy (leave empty for latest)"
     type: string
+    default: ""
 
 variables:
   - group: aws-lab-credentials
@@ -13,9 +14,6 @@ variables:
 
   - name: ECR_REPO
     value: 895930755293.dkr.ecr.eu-central-1.amazonaws.com/ecs-fargate-lab-app
-
-  - name: ECR_IMAGE_URI
-    value: $(ECR_REPO):${{ parameters.imageTag }}
 
 pool:
   vmImage: ubuntu-latest
@@ -36,6 +34,23 @@ stages:
         set -e
         aws sts get-caller-identity
       displayName: "AWS auth check"
+      env:
+        AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+        AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+        AWS_DEFAULT_REGION: $(AWS_REGION)
+
+    - bash: |
+        set -e
+        if [ -z "${{ parameters.imageTag }}" ]; then
+          echo "No tag specified, getting latest from ECR..."
+          LATEST_TAG=$(aws ecr describe-images --repository-name ecs-fargate-lab-app --query 'sort_by(imageDetails,&imagePushedAt)[-1].imageTags[0]' --output text)
+          echo "Latest tag: $LATEST_TAG"
+          echo "##vso[task.setvariable variable=ECR_IMAGE_URI]$(ECR_REPO):$LATEST_TAG"
+        else
+          echo "Using specified tag: ${{ parameters.imageTag }}"
+          echo "##vso[task.setvariable variable=ECR_IMAGE_URI]$(ECR_REPO):${{ parameters.imageTag }}"
+        fi
+      displayName: "Set ECR image URI"
       env:
         AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
         AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
