@@ -2,9 +2,10 @@ trigger: none
 
 parameters:
   - name: imageTag
-    displayName: "ECR image tag to deploy (leave empty for latest)"
+    displayName: "ECR image tag to deploy (optional - leave empty for latest)"
     type: string
-    default: ""
+    default: " "
+    required: false
 
 variables:
   - group: aws-lab-credentials
